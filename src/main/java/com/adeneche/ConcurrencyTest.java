@@ -58,9 +58,11 @@ public class ConcurrencyTest implements Runnable {
 
       rs.close();
       stmt.close();
-      doneSignal.countDown();
+      conn.close();
     } catch (Exception e) {
       e.printStackTrace();
+    } finally {
+      doneSignal.countDown();
     }
   }
 
@@ -108,6 +110,7 @@ public class ConcurrencyTest implements Runnable {
     }
 
     doneSignal.await();
-    conn.close();
+    System.out.println("Shutting down...");
+    executor.shutdown();
   }
 }
