@@ -8,6 +8,7 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.Statement;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -17,10 +18,12 @@ import java.util.concurrent.Executors;
  */
 public class ConcurrencyTest implements Runnable {
 
-  Connection conn = null;
+  final Connection conn;
+  final CountDownLatch doneSignal;
 
-  ConcurrencyTest(Connection conn) {
+  ConcurrencyTest(Connection conn, CountDownLatch doneSignal) {
     this.conn = conn;
+    this.doneSignal = doneSignal;
   }
 
   public void run() {
@@ -55,7 +58,7 @@ public class ConcurrencyTest implements Runnable {
 
       rs.close();
       stmt.close();
-//      conn.close();
+      doneSignal.countDown();
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -95,14 +98,16 @@ public class ConcurrencyTest implements Runnable {
     Connection conn = DriverManager.getConnection(URL_STRING, "", "");
 
     ExecutorService executor = Executors.newFixedThreadPool(options.numThreads);
+    CountDownLatch doneSignal = new CountDownLatch(options.numQueries);
     try {
       for (int i = 1; i <= options.numQueries; i++) {
-        executor.submit(new ConcurrencyTest(conn));
+        executor.submit(new ConcurrencyTest(conn, doneSignal));
       }
     } catch (Exception e) {
       e.printStackTrace();
-    } finally {
-      conn.close();
     }
+
+    doneSignal.await();
+    conn.close();
   }
 }
