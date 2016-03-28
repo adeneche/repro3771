@@ -7,6 +7,7 @@ import org.kohsuke.args4j.Option;
 import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -18,10 +19,12 @@ import java.util.concurrent.Executors;
  */
 public class ConcurrencyTest implements Runnable {
 
+  final int id;
   final Connection conn;
   final CountDownLatch doneSignal;
 
-  ConcurrencyTest(Connection conn, CountDownLatch doneSignal) {
+  ConcurrencyTest(int id, Connection conn, CountDownLatch doneSignal) {
+    this.id = id;
     this.conn = conn;
     this.doneSignal = doneSignal;
   }
@@ -30,40 +33,33 @@ public class ConcurrencyTest implements Runnable {
     try {
       selectData();
     } catch (Exception e) {
-      e.printStackTrace();
+      System.err.printf("[QUERY #%2d]: %s%n", id, e.getMessage());
+    } finally {
+      doneSignal.countDown();
     }
   }
 
   // SELECT data
-  public void selectData() {
-    try {
-      executeQuery("SELECT key1, key2 FROM `twoKeyJsn.json` where key2 = 'm'");
-    } catch(Exception e) {
-      e.printStackTrace();
-    }
+  public void selectData() throws SQLException {
+    executeQuery("SELECT key1, key2 FROM `twoKeyJsn.json` where key2 = 'm'");
   }
 
   // Execute Query
-  public void executeQuery(String query) {
-    long numBatches = 0;
-    try {
-      Statement stmt = conn.createStatement();
-      ResultSet rs = stmt.executeQuery(query);
+  public void executeQuery(String query) throws SQLException {
+    long numRows = 0;
 
-      while (rs.next()) {
-        numBatches++;
-      }
+    Statement stmt = conn.createStatement();
+    ResultSet rs = stmt.executeQuery(query);
 
-      System.out.printf("Total batches fetches: %d%n", numBatches);
-
-      rs.close();
-      stmt.close();
-      conn.close();
-    } catch (Exception e) {
-      e.printStackTrace();
-    } finally {
-      doneSignal.countDown();
+    while (rs.next()) {
+      numRows++;
     }
+
+    System.out.printf("[QUERY #%2d]: Total batches fetches: %d%n", id, numRows);
+
+    rs.close();
+    stmt.close();
+    conn.close();
   }
 
   private static class Options {
@@ -103,7 +99,7 @@ public class ConcurrencyTest implements Runnable {
     CountDownLatch doneSignal = new CountDownLatch(options.numQueries);
     try {
       for (int i = 1; i <= options.numQueries; i++) {
-        executor.submit(new ConcurrencyTest(conn, doneSignal));
+        executor.submit(new ConcurrencyTest(i, conn, doneSignal));
       }
     } catch (Exception e) {
       e.printStackTrace();
