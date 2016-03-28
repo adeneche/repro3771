@@ -101,7 +101,7 @@ public class ConcurrencyTest implements Runnable {
     ExecutorService executor = Executors.newFixedThreadPool(options.numThreads, new ThreadFactory() {
       int id = 1;
       public Thread newThread(Runnable r) {
-        return new Thread(null, r, "THREAD-" + id);
+        return new Thread(null, r, "THREAD-" + id++);
       }
     });
     CountDownLatch doneSignal = new CountDownLatch(options.numQueries);
