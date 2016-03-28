@@ -55,7 +55,7 @@ public class ConcurrencyTest implements Runnable {
 
       rs.close();
       stmt.close();
-      conn.close();
+//      conn.close();
     } catch (Exception e) {
       e.printStackTrace();
     }
@@ -101,6 +101,8 @@ public class ConcurrencyTest implements Runnable {
       }
     } catch (Exception e) {
       e.printStackTrace();
+    } finally {
+      conn.close();
     }
   }
 }
