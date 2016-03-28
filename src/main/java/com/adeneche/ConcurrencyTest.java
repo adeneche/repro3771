@@ -62,8 +62,12 @@ public class ConcurrencyTest implements Runnable {
   }
 
   private static class Options {
-    @Option(name = "-d")
+    @Option(name = "-d", required = true)
     String drillbit;
+    @Option(name = "-t")
+    int numThreads = 16;
+    @Option(name = "-n")
+    int numQueries = 100;
   }
 
   private static Options parseArguments(String[] args) {
@@ -90,9 +94,9 @@ public class ConcurrencyTest implements Runnable {
     Class.forName("org.apache.drill.jdbc.Driver").newInstance();
     Connection conn = DriverManager.getConnection(URL_STRING, "", "");
 
-    ExecutorService executor = Executors.newFixedThreadPool(16);
+    ExecutorService executor = Executors.newFixedThreadPool(options.numThreads);
     try {
-      for (int i = 1; i <= 100; i++) {
+      for (int i = 1; i <= options.numQueries; i++) {
         executor.submit(new ConcurrencyTest(conn));
       }
     } catch (Exception e) {
