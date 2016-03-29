@@ -47,19 +47,6 @@
         <appender-ref ref="FILE" />
     </logger>
 
-    <logger name="query.logger" additivity="false">
-        <level value="info" />
-        <appender-ref ref="QUERY" />
-        <!--     <appender-ref ref="SOCKET" /> -->
-    </logger>
-
-    <!--
-    <logger name="org.apache.drill" additivity="false">
-      <level value="debug" />
-      <appender-ref ref="SOCKET" />
-    </logger>
-     -->
-
     <root>
         <level value="error" />
         <appender-ref ref="STDOUT" />

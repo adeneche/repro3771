@@ -35,7 +35,7 @@ public class ConcurrencyTest implements Runnable {
 
   public void run() {
     try {
-      executeQuery("SELECT key1, key2 FROM `twoKeyJsn.json` where key2 = 'm'");
+      executeQuery("SELECT l_orderkey, l_partkey FROM `tpch10/lineitem`");
     } catch (Exception e) {
       System.err.printf("[query=%d]: ", queryNum);
       e.printStackTrace();
@@ -98,7 +98,7 @@ public class ConcurrencyTest implements Runnable {
   public static void main(String args[]) throws Exception {
     final Options options = parseArguments(args);
 
-    final String URL_STRING = "jdbc:drill:schema=dfs.tmp;drillbit=" + options.drillbit;
+    final String URL_STRING = "jdbc:drill:schema=dfs.data;drillbit=" + options.drillbit;
     Class.forName("org.apache.drill.jdbc.Driver").newInstance();
 
     ExecutorService executor = Executors.newFixedThreadPool(options.numQueries);
