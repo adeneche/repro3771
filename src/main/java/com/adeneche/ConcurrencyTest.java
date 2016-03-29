@@ -12,10 +12,11 @@ import java.sql.Statement;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 /**
- * Reproduction class for DRILL-3771
+ * Reproduction class for DRILL-3763:
+ * - submit N queries in parallel
+ * - shouldCancel one query after X seconds
  *
  */
 public class ConcurrencyTest implements Runnable {
@@ -23,29 +24,26 @@ public class ConcurrencyTest implements Runnable {
   final int queryNum;
   final Connection conn;
   final CountDownLatch doneSignal;
+  final boolean shouldCancel;
 
-  ConcurrencyTest(int queryNum, Connection conn, CountDownLatch doneSignal) {
+  ConcurrencyTest(int queryNum, Connection conn, CountDownLatch doneSignal, boolean cancel) {
     this.queryNum = queryNum;
     this.conn = conn;
     this.doneSignal = doneSignal;
+    this.shouldCancel = cancel;
   }
 
   public void run() {
     try {
-      selectData();
+      executeQuery("SELECT key1, key2 FROM `twoKeyJsn.json` where key2 = 'm'");
     } catch (Exception e) {
-      System.err.printf("[%s][query=%d]: ", Thread.currentThread().getName(), queryNum);
+      System.err.printf("[query=%d]: ", queryNum);
       e.printStackTrace();
     }
   }
 
-  // SELECT data
-  public void selectData() throws SQLException {
-    executeQuery("SELECT key1, key2 FROM `twoKeyJsn.json` where key2 = 'm'");
-  }
-
   // Execute Query
-  public void executeQuery(String query) throws SQLException {
+  private void executeQuery(String query) throws SQLException {
     long numRows = 0;
     try {
       Statement stmt = conn.createStatement();
@@ -53,9 +51,17 @@ public class ConcurrencyTest implements Runnable {
 
       while (rs.next()) {
         numRows++;
+        if (shouldCancel && numRows == 10000) {
+          stmt.cancel();
+          break;
+        }
       }
 
-      System.out.printf("[%s][queryId=%d]: batches fetched: %d%n", Thread.currentThread().getName(), queryNum, numRows);
+      if (shouldCancel) {
+        System.out.printf("[queryId=%d]: Query cancelled after fetching %d rows%n", queryNum, numRows);
+      } else {
+        System.out.printf("[queryId=%d]: Query completed after fetching %d rows%n", queryNum, numRows);
+      }
 
       rs.close();
       stmt.close();
@@ -68,10 +74,8 @@ public class ConcurrencyTest implements Runnable {
   private static class Options {
     @Option(name = "-d", required = true)
     String drillbit;
-    @Option(name = "-t")
-    int numThreads = 16;
     @Option(name = "-n")
-    int numQueries = 100;
+    int numQueries = 10;
   }
 
   private static Options parseArguments(String[] args) {
@@ -96,21 +100,17 @@ public class ConcurrencyTest implements Runnable {
 
     final String URL_STRING = "jdbc:drill:schema=dfs.tmp;drillbit=" + options.drillbit;
     Class.forName("org.apache.drill.jdbc.Driver").newInstance();
-    Connection conn = DriverManager.getConnection(URL_STRING, "", "");
 
-    ExecutorService executor = Executors.newFixedThreadPool(options.numThreads, new ThreadFactory() {
-      int id = 1;
-      public Thread newThread(Runnable r) {
-        return new Thread(null, r, "THREAD-" + id++);
-      }
-    });
+    ExecutorService executor = Executors.newFixedThreadPool(options.numQueries);
     CountDownLatch doneSignal = new CountDownLatch(options.numQueries);
     try {
-      for (int i = 1; i <= options.numQueries; i++) {
-        executor.submit(new ConcurrencyTest(i, conn, doneSignal));
+      for (int i = 0; i < options.numQueries; i++) {
+        final Connection conn = DriverManager.getConnection(URL_STRING, "", "");
+        executor.submit(new ConcurrencyTest(i, conn, doneSignal, i == options.numQueries-1));
       }
     } catch (Exception e) {
       e.printStackTrace();
+      System.exit(-1);
     }
 
     doneSignal.await();
