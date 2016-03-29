@@ -24,7 +24,7 @@
     <dependency>
       <groupId>org.apache.drill.exec</groupId>
       <artifactId>drill-jdbc-all</artifactId>
-      <version>1.2.0</version>
+      <version>1.7.0-SNAPSHOT</version>
     </dependency>
     <dependency>
       <groupId>args4j</groupId>
