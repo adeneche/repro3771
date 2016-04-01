@@ -21,23 +21,25 @@ import java.util.concurrent.Executors;
  */
 public class ConcurrencyTest implements Runnable {
 
-  final int queryNum;
+  final int id;
+  final String query;
   final Connection conn;
   final CountDownLatch doneSignal;
-  final boolean shouldCancel;
+  final int rowsBeforeCancel;
 
-  ConcurrencyTest(int queryNum, Connection conn, CountDownLatch doneSignal, boolean cancel) {
-    this.queryNum = queryNum;
+  ConcurrencyTest(int id, final String query, final Connection conn, final CountDownLatch doneSignal, final int rowsBeforeCancel) {
+    this.id = id;
+    this.query = query;
     this.conn = conn;
     this.doneSignal = doneSignal;
-    this.shouldCancel = cancel;
+    this.rowsBeforeCancel = rowsBeforeCancel;
   }
 
   public void run() {
     try {
-      executeQuery("SELECT l_orderkey, l_partkey FROM `tpch10/lineitem`");
+      executeQuery(query);
     } catch (Exception e) {
-      System.err.printf("[query=%d]: ", queryNum);
+      System.err.printf("[query=%d]: ", id);
       e.printStackTrace();
     }
   }
@@ -51,31 +53,27 @@ public class ConcurrencyTest implements Runnable {
 
       while (rs.next()) {
         numRows++;
-        if (shouldCancel && numRows == 10000) {
+        if (numRows == rowsBeforeCancel) {
           stmt.cancel();
           break;
         }
       }
 
-      if (shouldCancel) {
-        System.out.printf("[queryId=%d]: Query cancelled after fetching %d rows%n", queryNum, numRows);
-      } else {
-        System.out.printf("[queryId=%d]: Query completed after fetching %d rows%n", queryNum, numRows);
-      }
-
       rs.close();
       stmt.close();
-      conn.close();
+      conn.close(); // TODO move connection closing after all threads are done
     } finally {
       doneSignal.countDown();
     }
   }
 
   private static class Options {
-    @Option(name = "-d", required = true)
-    String drillbit;
     @Option(name = "-n")
     int numQueries = 10;
+    @Option(name = "-u", required = true)
+    String url;
+    @Option(name = "-q", required = true)
+    String query;
   }
 
   private static Options parseArguments(String[] args) {
@@ -98,15 +96,15 @@ public class ConcurrencyTest implements Runnable {
   public static void main(String args[]) throws Exception {
     final Options options = parseArguments(args);
 
-    final String URL_STRING = "jdbc:drill:schema=dfs.data;drillbit=" + options.drillbit;
     Class.forName("org.apache.drill.jdbc.Driver").newInstance();
 
     ExecutorService executor = Executors.newFixedThreadPool(options.numQueries);
     CountDownLatch doneSignal = new CountDownLatch(options.numQueries);
     try {
       for (int i = 0; i < options.numQueries; i++) {
-        final Connection conn = DriverManager.getConnection(URL_STRING, "", "");
-        executor.submit(new ConcurrencyTest(i, conn, doneSignal, i == options.numQueries-1));
+        final Connection conn = DriverManager.getConnection(options.url, "", "");
+        final int rowsBeforeCancel = (i == options.numQueries-1) ? 10000:-1;
+        executor.submit(new ConcurrencyTest(i, options.query, conn, doneSignal, rowsBeforeCancel));
       }
     } catch (Exception e) {
       e.printStackTrace();
