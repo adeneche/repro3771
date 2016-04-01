@@ -24,35 +24,12 @@
         </encoder>
     </appender>
 
-
-    <appender name="FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
-        <file>test.log</file>
-        <rollingPolicy class="ch.qos.logback.core.rolling.FixedWindowRollingPolicy">
-            <fileNamePattern>test.log.%i</fileNamePattern>
-            <minIndex>1</minIndex>
-            <maxIndex>10</maxIndex>
-        </rollingPolicy>
-
-        <triggeringPolicy class="ch.qos.logback.core.rolling.SizeBasedTriggeringPolicy">
-            <maxFileSize>100MB</maxFileSize>
-        </triggeringPolicy>
-        <encoder>
-            <pattern>%date{ISO8601} [%thread] %-5level %logger{36} - %msg%n</pattern>
-        </encoder>
-    </appender>
-
     <logger name="org.apache.drill" additivity="false">
-        <level value="debug" />
-        <appender-ref ref="FILE" />
+        <level value="WARN" />
+        <appender-ref ref="STDOUT" />
     </logger>
-<!--
-    <logger name="org.apache.drill.exec.memory.BaseAllocator">
-        <level value="info" />
-        <appender-ref ref="FILE" />
-    </logger>
--->
     <root>
-        <level value="info" />
+        <level value="error" />
         <appender-ref ref="STDOUT" />
     </root>
 

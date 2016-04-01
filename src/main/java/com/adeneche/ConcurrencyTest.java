@@ -9,9 +9,6 @@ import java.sql.DriverManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 
 /**
  * Reproduction class for DRILL-3763:
@@ -19,61 +16,33 @@ import java.util.concurrent.Executors;
  * - shouldCancel one query after X seconds
  *
  */
-public class ConcurrencyTest implements Runnable {
-
-  final int id;
-  final String query;
-  final Connection conn;
-  final CountDownLatch doneSignal;
-  final int rowsBeforeCancel;
-
-  ConcurrencyTest(int id, final String query, final Connection conn, final CountDownLatch doneSignal, final int rowsBeforeCancel) {
-    this.id = id;
-    this.query = query;
-    this.conn = conn;
-    this.doneSignal = doneSignal;
-    this.rowsBeforeCancel = rowsBeforeCancel;
-  }
-
-  public void run() {
-    try {
-      executeQuery(query);
-    } catch (Exception e) {
-      System.err.printf("[query=%d]: ", id);
-      e.printStackTrace();
-    }
-  }
-
-  // Execute Query
-  private void executeQuery(String query) throws SQLException {
-    long numRows = 0;
-    try {
-      Statement stmt = conn.createStatement();
-      ResultSet rs = stmt.executeQuery(query);
-
-      while (rs.next()) {
-        numRows++;
-        if (numRows == rowsBeforeCancel) {
-          stmt.cancel();
-          break;
-        }
-      }
-
-      rs.close();
-      stmt.close();
-      conn.close(); // TODO move connection closing after all threads are done
-    } finally {
-      doneSignal.countDown();
-    }
-  }
+public class ConcurrencyTest {
 
   private static class Options {
-    @Option(name = "-n")
-    int numQueries = 10;
     @Option(name = "-u", required = true)
     String url;
     @Option(name = "-q", required = true)
     String query;
+  }
+
+  // Execute Query
+  private static void executeQuery(final Connection conn, final String query, int rowsBeforeCancel) throws SQLException {
+    long numRows = 0;
+
+    Statement stmt = conn.createStatement();
+    ResultSet rs = stmt.executeQuery(query);
+
+    while (rs.next()) {
+      numRows++;
+      if (numRows == rowsBeforeCancel) {
+        stmt.cancel();
+        break;
+      }
+    }
+
+    rs.close();
+    stmt.close();
+    conn.close(); // TODO move connection closing after all threads are done
   }
 
   private static Options parseArguments(String[] args) {
@@ -98,21 +67,7 @@ public class ConcurrencyTest implements Runnable {
 
     Class.forName("org.apache.drill.jdbc.Driver").newInstance();
 
-    ExecutorService executor = Executors.newFixedThreadPool(options.numQueries);
-    CountDownLatch doneSignal = new CountDownLatch(options.numQueries);
-    try {
-      for (int i = 0; i < options.numQueries; i++) {
-        final Connection conn = DriverManager.getConnection(options.url, "", "");
-        final int rowsBeforeCancel = (i == options.numQueries-1) ? 10000:-1;
-        executor.submit(new ConcurrencyTest(i, options.query, conn, doneSignal, rowsBeforeCancel));
-      }
-    } catch (Exception e) {
-      e.printStackTrace();
-      System.exit(-1);
-    }
-
-    doneSignal.await();
-    System.out.println("Shutting down...");
-    executor.shutdown();
+    final Connection conn = DriverManager.getConnection(options.url, "", "");
+    executeQuery(conn, options.query, 10000);
   }
 }
